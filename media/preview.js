@@ -187,9 +187,9 @@
     const manager = dominantManager(kids);
     if (manager === 'place') {
       container.classList.add('abs');
-      for (const k of kids) {
-        const el = renderWidget(k, children);
-        applyPlace(el, k.layout || {});
+      for (const view of expand(kids)) {
+        const el = renderWidget(view, children);
+        applyPlace(el, effLayout(view));
         container.appendChild(el);
       }
       return;
@@ -198,9 +198,9 @@
     if (manager === 'grid') {
       const grid = document.createElement('div');
       grid.className = 'grid';
-      for (const k of kids) {
-        const el = renderWidget(k, children);
-        applyGrid(el, k.layout || {});
+      for (const view of expand(kids)) {
+        const el = renderWidget(view, children);
+        applyGrid(el, effLayout(view), view);
         grid.appendChild(el);
       }
       container.appendChild(grid);
@@ -208,6 +208,44 @@
     }
 
     container.appendChild(packStack(kids, children));
+  }
+
+  // Um widget criado num ciclo 'for' rende várias instâncias.
+  function expand(kids) {
+    const out = [];
+    for (const w of kids) {
+      const n = Math.min(60, Math.max(1, Number(w.repeat || 1)));
+      for (let i = 0; i < n; i++) out.push({ w, i });
+    }
+    return out;
+  }
+
+  // Opções/layout desta instância, com os valores expandidos do ciclo.
+  function merged(base, i) {
+    const per = base && base.per_instance;
+    if (!per) return base || {};
+    const out = Object.assign({}, base);
+    delete out.per_instance;
+    for (const key of Object.keys(per)) {
+      if (per[key].length > i) out[key] = per[key][i];
+    }
+    return out;
+  }
+
+  function effLayout(view) {
+    return merged(view.w.layout, view.i);
+  }
+
+  // As opções expandidas do ciclo vêm num campo próprio do widget.
+  function effOptions(view) {
+    const base = view.w.options || {};
+    const per = view.w.per_instance;
+    if (!per) return base;
+    const out = Object.assign({}, base);
+    for (const key of Object.keys(per)) {
+      if (per[key].length > view.i) out[key] = per[key][view.i];
+    }
+    return out;
   }
 
   function dominantManager(kids) {
@@ -228,10 +266,10 @@
     const bottom = [];
     let row = null;
 
-    for (const k of kids) {
-      const layout = k.layout || {};
+    for (const view of expand(kids)) {
+      const layout = effLayout(view);
       const side = String(layout.side || 'top').toLowerCase();
-      const el = renderWidget(k, children);
+      const el = renderWidget(view, children);
       applyPack(el, layout, side);
 
       if (side === 'left' || side === 'right') {
@@ -278,9 +316,14 @@
     applyPadding(el, layout);
   }
 
-  function applyGrid(el, layout) {
-    const row = Number(layout.row || 0);
+  function applyGrid(el, layout, view) {
+    const per = (view && view.w.layout && view.w.layout.per_instance) || {};
+    let row = Number(layout.row || 0);
     const col = Number(layout.column || 0);
+    // Repetições sem row/column dinâmicos empilham-se em linhas seguidas.
+    if (view && view.i > 0 && per.row === undefined && per.column === undefined) {
+      row += view.i;
+    }
     el.style.gridRow = `${row + 1} / span ${Number(layout.rowspan || 1)}`;
     el.style.gridColumn = `${col + 1} / span ${Number(layout.columnspan || 1)}`;
     const sticky = String(layout.sticky || '').toLowerCase();
@@ -322,11 +365,14 @@
 
   // --- widgets --------------------------------------------------------------
 
-  function renderWidget(w, children) {
-    const opts = w.options || {};
+  function renderWidget(view, children) {
+    const w = view.w;
+    const opts = effOptions(view);
     const el = document.createElement('div');
     el.className = 'widget w-' + w.type.toLowerCase();
-    el.title = `${w.cls} (linha ${w.line}) — clique para abrir no editor`;
+    if (w.conditional) el.classList.add('conditional');
+    const suffix = w.repeat ? ` · instância ${view.i + 1}/${w.repeat}` : '';
+    el.title = `${w.cls} (linha ${w.line})${suffix} — clique para abrir no editor`;
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       vscode.postMessage({ command: 'reveal', line: w.line });
@@ -396,8 +442,11 @@
         el.appendChild(head);
         break;
       }
-      case 'Canvas':
+      case 'Canvas': {
+        const draw = (w.config && w.config.draw) || [];
+        if (draw.length) el.appendChild(renderCanvasItems(draw, opts));
         break;
+      }
       case 'Notebook': {
         const tabs = document.createElement('div');
         tabs.className = 'tabs';
@@ -411,8 +460,7 @@
           tabs.appendChild(tab);
         });
         if (kids.length) {
-          const first = renderWidget(kids[0], children);
-          pages.appendChild(first);
+          pages.appendChild(renderWidget({ w: kids[0], i: 0 }, children));
         }
         el.append(tabs, pages);
         return sized(el, opts);
@@ -438,6 +486,75 @@
       layoutChildren(el, children.get(w.id) || [], children);
     }
     return sized(el, opts);
+  }
+
+  // Itens create_* de um Canvas, desenhados em SVG sobre a área do widget.
+  function renderCanvasItems(items, opts) {
+    const SVG = 'http://www.w3.org/2000/svg';
+    const width = Number(opts.width) || 200;
+    const height = Number(opts.height) || 120;
+    const svg = document.createElementNS(SVG, 'svg');
+    svg.setAttribute('class', 'canvas-items');
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+
+    for (const item of items) {
+      const c = item.coords || [];
+      const o = item.options || {};
+      const fill = typeof o.fill === 'string' ? o.fill : null;
+      const outline = typeof o.outline === 'string' ? o.outline : null;
+      let node = null;
+
+      if (item.kind === 'rectangle' && c.length >= 4) {
+        node = document.createElementNS(SVG, 'rect');
+        node.setAttribute('x', Math.min(c[0], c[2]));
+        node.setAttribute('y', Math.min(c[1], c[3]));
+        node.setAttribute('width', Math.abs(c[2] - c[0]));
+        node.setAttribute('height', Math.abs(c[3] - c[1]));
+        node.setAttribute('fill', fill || 'none');
+        node.setAttribute('stroke', outline || '#000');
+      } else if (item.kind === 'oval' && c.length >= 4) {
+        node = document.createElementNS(SVG, 'ellipse');
+        node.setAttribute('cx', (c[0] + c[2]) / 2);
+        node.setAttribute('cy', (c[1] + c[3]) / 2);
+        node.setAttribute('rx', Math.abs(c[2] - c[0]) / 2);
+        node.setAttribute('ry', Math.abs(c[3] - c[1]) / 2);
+        node.setAttribute('fill', fill || 'none');
+        node.setAttribute('stroke', outline || '#000');
+      } else if ((item.kind === 'line' || item.kind === 'polygon') && c.length >= 4) {
+        const points = [];
+        for (let i = 0; i + 1 < c.length; i += 2) points.push(`${c[i]},${c[i + 1]}`);
+        node = document.createElementNS(SVG, item.kind === 'line' ? 'polyline' : 'polygon');
+        node.setAttribute('points', points.join(' '));
+        node.setAttribute('fill', item.kind === 'polygon' ? fill || '#ccc' : 'none');
+        node.setAttribute('stroke', item.kind === 'line' ? fill || '#000' : outline || '#000');
+      } else if (item.kind === 'text' && c.length >= 2) {
+        node = document.createElementNS(SVG, 'text');
+        node.setAttribute('x', c[0]);
+        node.setAttribute('y', c[1]);
+        node.setAttribute('text-anchor', 'middle');
+        node.setAttribute('dominant-baseline', 'middle');
+        node.setAttribute('font-size', '12');
+        node.setAttribute('fill', fill || '#000');
+        node.textContent = o.text !== undefined ? String(o.text) : '';
+      } else if (c.length >= 2) {
+        // arc, image, window: marca a posição sem tentar reproduzir
+        node = document.createElementNS(SVG, 'rect');
+        node.setAttribute('x', c[0]);
+        node.setAttribute('y', c[1]);
+        node.setAttribute('width', Math.max(12, Math.abs((c[2] || c[0] + 24) - c[0])));
+        node.setAttribute('height', Math.max(12, Math.abs((c[3] || c[1] + 24) - c[1])));
+        node.setAttribute('fill', 'none');
+        node.setAttribute('stroke', '#b06a6a');
+        node.setAttribute('stroke-dasharray', '3 2');
+      }
+
+      if (node) {
+        if (typeof o.width === 'number') node.setAttribute('stroke-width', o.width);
+        svg.appendChild(node);
+      }
+    }
+    return svg;
   }
 
   // width/height em Tkinter são caracteres (texto) ou píxeis (Frame/Canvas).

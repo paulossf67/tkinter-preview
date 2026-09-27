@@ -158,15 +158,18 @@ def is_main_guard(test):
 MAX_REPEAT = 30
 
 
-def loop_values(node):
+def loop_values(node, consts=None):
     """Valores percorridos por um `for`, se forem estáticos.
 
-    Suporta listas/tuplos literais, `range(...)` com constantes e
-    `enumerate(lista_literal)`.
+    Suporta listas/tuplos literais, constantes do módulo (`for x in PRODUTOS`),
+    `range(...)` com constantes e `enumerate(...)` de qualquer dos anteriores.
     """
     direct = literal(node)
     if isinstance(direct, (list, tuple)):
         return list(direct)[:MAX_REPEAT]
+
+    if isinstance(node, ast.Name) and consts and node.id in consts:
+        return list(consts[node.id])[:MAX_REPEAT]
 
     if isinstance(node, ast.Call):
         fn = node.func.id if isinstance(node.func, ast.Name) else None
@@ -177,7 +180,7 @@ def loop_values(node):
             except (TypeError, ValueError):
                 return None
         if fn == "enumerate" and node.args:
-            inner = loop_values(node.args[0])
+            inner = loop_values(node.args[0], consts)
             if inner:
                 return [(i, v) for i, v in enumerate(inner)]
     return None
@@ -286,6 +289,7 @@ class TkinterParser(ast.NodeVisitor):
         self.class_stack = []      # tipo de container associado a 'self'
         self.loop_stack = []       # ciclos 'for' em curso: {"var", "values"}
         self.cond_depth = 0        # dentro de quantos 'if'/'try' estamos
+        self.consts = {}           # listas/tuplos literais atribuídos a nomes
 
     # -- criação -----------------------------------------------------------
 
@@ -342,7 +346,7 @@ class TkinterParser(ast.NodeVisitor):
 
     def visit_For(self, node):
         names = target_names(node.target)
-        values = loop_values(node.iter)
+        values = loop_values(node.iter, self.consts)
         if names and values:
             self.loop_stack.append({"vars": names, "values": values})
             for stmt in node.body:
@@ -419,6 +423,12 @@ class TkinterParser(ast.NodeVisitor):
             self.generic_visit(node)
 
     def visit_Assign(self, node):
+        # Guarda listas literais para resolver ciclos como `for x in PRODUTOS`.
+        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            val = literal(node.value)
+            if isinstance(val, list):
+                self.consts[node.targets[0].id] = val
+
         cls = call_class(node.value)
         if cls in WIDGETS and len(node.targets) == 1:
             var = dotted_name(node.targets[0])

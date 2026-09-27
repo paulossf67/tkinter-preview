@@ -147,6 +147,19 @@ class TestLoops(unittest.TestCase):
         self.assertEqual(btn["repeat"], 2)
         self.assertEqual(btn["per_instance"]["text"], ["Ana", "Bruno"])
 
+    def test_loop_over_module_constant(self):
+        r = analyse(
+            'import tkinter as tk\n'
+            'PRODUTOS = ["PLA", "ABS", "Resina"]\n'
+            'root = tk.Tk()\n'
+            'for i, p in enumerate(PRODUTOS):\n'
+            '    tk.Label(root, text=p).grid(row=i, column=0)\n'
+        )
+        lbl = find(r, "Label")[0]
+        self.assertEqual(lbl["repeat"], 3)
+        self.assertEqual(lbl["per_instance"]["text"], ["PLA", "ABS", "Resina"])
+        self.assertEqual(r["warnings"], [])
+
     def test_enumerate_loop(self):
         r = analyse(
             'import tkinter as tk\n'

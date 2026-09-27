@@ -216,6 +216,95 @@ body {
   background-size: 12px 12px;
 }
 
+.w-canvas {
+  position: relative;
+}
+
+.canvas-items {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* ---- barra de menus ---- */
+
+.menubar {
+  display: flex;
+  background: var(--tk-face);
+  border-bottom: 1px solid #c8c8c8;
+  font-size: 12px;
+  user-select: none;
+}
+
+.menu-item {
+  position: relative;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: #cde0f5;
+}
+
+.menu-drop {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  min-width: 150px;
+  padding: 2px 0;
+  background: #fbfbfb;
+  border: 1px solid #a8a8a8;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+
+.menu-item:hover > .menu-drop {
+  display: block;
+}
+
+.menu-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 3px 14px;
+  white-space: nowrap;
+}
+
+.menu-row:hover {
+  background: #cde0f5;
+}
+
+.menu-acc {
+  color: #777;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 3px 4px;
+  background: #d0d0d0;
+}
+
+/* ---- ramos condicionais e avisos ---- */
+
+.conditional {
+  opacity: 0.72;
+  outline: 1px dotted #9a7b3f;
+  outline-offset: 1px;
+}
+
+.warnings {
+  align-self: stretch;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--vscode-editorWarning-foreground, #cca700);
+  background: var(--vscode-editorWidget-background, #252526);
+  border-left: 3px solid var(--vscode-editorWarning-foreground, #cca700);
+}
+
 .w-checkbutton,
 .w-radiobutton {
   display: inline-flex;
