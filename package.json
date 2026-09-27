@@ -1,0 +1,78 @@
+{
+  "name": "tkinter-preview",
+  "displayName": "Tkinter Preview",
+  "description": "Pré-visualização em tempo real de interfaces gráficas Tkinter sem executar o código",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:python"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "tkinter-preview.openPreview",
+        "title": "Abrir Pré-visualização Tkinter",
+        "category": "Tkinter Preview",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "tkinter-preview.refresh",
+        "title": "Atualizar Pré-visualização Tkinter",
+        "category": "Tkinter Preview"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == python",
+          "command": "tkinter-preview.openPreview",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "tkinter-preview.refresh",
+          "when": "resourceLangId == python"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Tkinter Preview",
+      "properties": {
+        "tkinterPreview.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Caminho do interpretador Python. Vazio = detecta automaticamente (extensão ms-python.python, depois 'python'/'python3')."
+        },
+        "tkinterPreview.liveUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Atualizar a pré-visualização enquanto digita (com debounce). Se falso, atualiza apenas ao salvar."
+        },
+        "tkinterPreview.debounceMs": {
+          "type": "number",
+          "default": 400,
+          "description": "Tempo de espera (ms) após a última tecla antes de reanalisar o ficheiro."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "18.x",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
